@@ -16,7 +16,11 @@ Results:
 - Restore removed the overlay and left the source page intact.
 - The monitored browser context attempted zero HTTP/HTTPS requests during
   the offline phase.
-- Rendered setup and mosaic screenshots were visually inspected.
+- Rendered setup, mosaic, and blurred loading screenshots were visually inspected.
+- The updated browser check delivered model-loading and intermediate scan
+  progress to the content script. The first scan reported every completed
+  text block in order, and progress stayed within its actual total during
+  cached rescans, dynamic content, and scrolling.
 - TypeScript checks and six contract tests passed, including real-tokenizer
   parity with the pinned upstream tensor fixture.
 

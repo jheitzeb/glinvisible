@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, normalizeSettings, type Segment } from './types.ts';
+import { DEFAULT_SETTINGS, normalizeSettings, type Segment, type ProgressRoute } from './types.ts';
 
 let offscreenCreation: Promise<void> | undefined;
 async function ensureOffscreen() {
@@ -9,10 +9,10 @@ async function ensureOffscreen() {
   }).finally(() => { offscreenCreation = undefined; });
   await offscreenCreation;
 }
-async function inference(action: string, segments?: Segment[]) {
+async function inference(action: string, segments?: Segment[], progressRoute?: ProgressRoute) {
   await ensureOffscreen();
   const { settings } = await chrome.storage.local.get('settings');
-  return chrome.runtime.sendMessage({ target: 'offscreen', action, segments, settings: normalizeSettings(settings) });
+  return chrome.runtime.sendMessage({ target: 'offscreen', action, segments, progressRoute, settings: normalizeSettings(settings) });
 }
 async function tabAction(action: string, tabId?: number) {
   const tab = tabId ? await chrome.tabs.get(tabId) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
@@ -40,6 +40,12 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   const isPage = !sender.url?.startsWith(chrome.runtime.getURL(''));
   if (isPage && !['detect', 'page-state', 'settings-for-page'].includes(action)) { respond({ ok: false, error: 'This request is only available in extension settings.' }); return; }
   (async () => {
+    if (action === 'scan-progress') {
+      if (sender.url !== chrome.runtime.getURL('offscreen.html')) throw new Error('Invalid progress sender');
+      const route = message.progressRoute as ProgressRoute;
+      await chrome.tabs.sendMessage(route.tabId, { target: 'content', action: 'scan-progress', scanId: route.scanId, progress: message.progress }).catch(() => {});
+      return { ok: true };
+    }
     if (action === 'settings-for-page') {
       const { settings } = await chrome.storage.local.get('settings');
       return { ok: true, value: normalizeSettings(settings) };
@@ -56,7 +62,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (['status', 'self-check', 'unload'].includes(action)) return inference(action);
     if (action === 'detect') {
       if (!Array.isArray(message.segments) || message.segments.some((s: Segment) => typeof s.id !== 'string' || typeof s.text !== 'string')) throw new Error('Invalid viewport request');
-      return inference('detect', message.segments);
+      const progressRoute = sender.tab?.id && typeof message.scanId === 'string' && message.scanId.length <= 128
+        ? { tabId: sender.tab.id, scanId: message.scanId } : undefined;
+      return inference('detect', message.segments, progressRoute);
     }
     throw new Error('Unknown extension action');
   })().then(respond, error => respond({ ok: false, error: error.message || 'Extension request failed' }));

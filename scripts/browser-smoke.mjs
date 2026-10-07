@@ -52,18 +52,29 @@ try {
   const original = await page.locator('section').innerHTML();
   await page.screenshot({ caret: 'initial', path: 'artifacts/page-before.png' });
   const action = action => setup.evaluate(async action => chrome.runtime.sendMessage({ target: 'background', action }), action);
+  await setup.evaluate(() => {
+    globalThis.scanProgressEvents = [];
+    chrome.runtime.onMessage.addListener(message => {
+      if (message.target === 'background' && message.action === 'scan-progress') globalThis.scanProgressEvents.push(message);
+    });
+  });
+  const unloaded = await action('unload'); assert.equal(unloaded.ok, true);
   const toggle = await action('toggle'); assert.equal(toggle?.ok, true, JSON.stringify(toggle));
+  const progressSnapshots = [];
   async function waitState() {
     const deadline = Date.now() + 180000;
     while (Date.now() < deadline) {
       const result = await action('state');
       if (!result?.ok) throw new Error(result?.error || 'Extension did not respond');
+      if (result.value?.progress) progressSnapshots.push(result.value.progress);
       if (result.value?.state === 'error') throw new Error(result.value.detail);
       if (result.value?.state === 'active') return result.value;
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 40));
     }
     throw new Error('Redaction timed out');
   }
+  await page.waitForSelector('[data-glinvisible][data-state="scanning"]');
+  await page.screenshot({ caret: 'initial', path: 'artifacts/page-scanning.png' });
   const first = await waitState(); console.log('page:', first);
   assert.match(first.detail, /[1-9]\d* detected masks/);
   assert.equal(await page.locator('[data-glinvisible]').count(), 1);
@@ -84,11 +95,19 @@ try {
   await new Promise(r => setTimeout(r, 250));
   const scrolled = await waitState(); assert.match(scrolled.detail, /[1-9]\d* detected masks/);
   await page.screenshot({ caret: 'initial', path: 'artifacts/page-scrolled.png' });
+  const events = await setup.evaluate(() => globalThis.scanProgressEvents);
+  assert.ok(events.some(e => e.progress.phase === 'loading'), 'Missing model loading progress');
+  const firstScanId = events[0].progressRoute.scanId;
+  const firstProgress = events.filter(e => e.progressRoute.scanId === firstScanId && e.progress.phase === 'scanning').map(e => e.progress);
+  assert.deepEqual(firstProgress.map(p => p.completed), Array.from({ length: firstProgress[0].total + 1 }, (_, i) => i));
+  assert.ok(progressSnapshots.some(p => p.phase === 'loading'), 'Loading progress never reached the content script');
+  assert.ok(progressSnapshots.some(p => p.completed > 0 && p.completed < p.total), 'Intermediate progress never reached the content script');
+  assert.ok(progressSnapshots.every(p => p.completed >= 0 && p.completed <= p.total));
   const restore = await action('restore'); assert.equal(restore.ok, true);
   assert.equal(await page.locator('[data-glinvisible]').count(), 0);
   assert.equal(await page.locator('input').inputValue(), 'alice@example.com');
   assert.deepEqual(remote, [], `Unexpected remote requests: ${remote.join(', ')}`);
-  const evidence = { date: new Date().toISOString(), chromium: context.browser()?.version(), fixtureOnlyFilePermission: true, coldRestart: true, browserOffline: true, remoteRequests: remote.length, selfCheck: status, first, changed, manualSelection: true, scrollRescan: true, originalDomPreserved: true, restored: true };
+  const evidence = { date: new Date().toISOString(), chromium: context.browser()?.version(), fixtureOnlyFilePermission: true, coldRestart: true, browserOffline: true, remoteRequests: remote.length, selfCheck: status, first, changed, manualSelection: true, scrollRescan: true, progressEvents: events.length, intermediateProgress: true, originalDomPreserved: true, restored: true };
   await writeFile('artifacts/offline-smoke.json', JSON.stringify(evidence, null, 2));
   console.log('PASS: cached model, cold restart, offline inference, DOM overlay, dynamic content, restore, zero remote requests.');
 } finally { await context.close(); }

@@ -1,6 +1,6 @@
 import { collectViewport, segmentUnchanged } from './scanner.ts';
 import { MosaicRenderer } from './renderer.ts';
-import { normalizeSettings, type Detection } from './types.ts';
+import { normalizeSettings, type Detection, type ScanProgress } from './types.ts';
 
 // Programmatic injection is idempotent and lives in Chrome's isolated world.
 if (!(globalThis as any).__glinvisible) {
@@ -12,9 +12,14 @@ if (!(globalThis as any).__glinvisible) {
   const cache = new Map<string, Detection['spans']>();
   let settingsKey = '';
   const manualRanges: Range[] = [];
+  let scanInfo: { id: string; epoch: number; cached: number; total: number } | undefined;
+  let progress: ScanProgress | undefined;
+  const scanning = (text: string, value?: ScanProgress) => {
+    detail = text; progress = value; renderer?.scanning(text, value);
+  };
   const notify = (value: string) => { state = value; void chrome.runtime.sendMessage({ target: 'background', action: 'page-state', state }).catch(() => {}); };
   const restore = () => {
-    active = false; epoch++; again = false; clearTimeout(timer); observer.disconnect();
+    active = false; epoch++; again = false; scanInfo = undefined; progress = undefined; clearTimeout(timer); observer.disconnect();
     renderer?.destroy(); renderer = undefined; cache.clear(); manualRanges.length = 0; notify('off');
   };
   const observer = new MutationObserver(records => {
@@ -23,8 +28,8 @@ if (!(globalThis as any).__glinvisible) {
   });
   function schedule() {
     if (!active) return;
-    // Conceal the viewport until fresh content and positions have been evaluated.
-    epoch++; renderer?.status('Scanning changed content locally...', true); notify('scanning');
+    // Keep page context visible while refreshing text and mask positions.
+    epoch++; scanInfo = undefined; scanning('Checking changed content on your device...'); notify('scanning');
     clearTimeout(timer); timer = setTimeout(scan, 180);
   }
   async function scan() {
@@ -33,7 +38,7 @@ if (!(globalThis as any).__glinvisible) {
     running = true; again = false;
     const revision = epoch;
     try {
-      renderer!.status('Scanning locally. First use loads the model into memory.', true); notify('scanning');
+      scanInfo = undefined; scanning('Preparing visible text on your device...'); notify('scanning');
       const response = await chrome.runtime.sendMessage({ target: 'background', action: 'settings-for-page' }).catch(() => null);
       // Settings arrive with detection results. Page scripts never receive model files.
       const settings = normalizeSettings(response?.value);
@@ -41,8 +46,11 @@ if (!(globalThis as any).__glinvisible) {
       if (nextKey !== settingsKey) { cache.clear(); settingsKey = nextKey; }
       const { segments, media } = collectViewport(renderer!.host);
       const pending = segments.filter(s => !cache.has(s.text));
+      if (!active || revision !== epoch) { again = active; return; }
+      scanInfo = { id: crypto.randomUUID(), epoch: revision, cached: segments.length - pending.length, total: segments.length };
+      scanning('Checking visible text on your device...', { phase: 'scanning', completed: scanInfo.cached, total: scanInfo.total });
       if (pending.length) {
-        const answer = await chrome.runtime.sendMessage({ target: 'background', action: 'detect', segments: pending.map(({ id, text }) => ({ id, text })) });
+        const answer = await chrome.runtime.sendMessage({ target: 'background', action: 'detect', scanId: scanInfo.id, segments: pending.map(({ id, text }) => ({ id, text })) });
         if (!answer?.ok) throw new Error(answer?.error || 'Local inference did not complete');
         for (const detection of answer.value.results as Detection[]) {
           const segment = pending.find(s => s.id === detection.id);
@@ -59,12 +67,12 @@ if (!(globalThis as any).__glinvisible) {
       for (const range of manualRanges) if (range.startContainer.isConnected) renderer!.addSelection(range);
       renderer!.paint(settings.blockSize);
       detail = `${masked} detected masks. Local AI active${media.length ? `. ${media.length} embedded regions covered` : ''}.`;
-      renderer!.status(detail); notify('active');
+      scanInfo = undefined; progress = undefined; renderer!.status(detail); notify('active');
       if (cache.size > 400) cache.clear();
     } catch (error) {
       if (active && revision === epoch) {
         detail = error instanceof Error ? error.message : 'Local scan failed';
-        renderer!.status(`${detail} Page stays covered until you restore or retry.`, true); notify('error');
+        scanInfo = undefined; progress = undefined; renderer!.error(`${detail} Restore the page to stop or retry.`); notify('error');
       }
     } finally { running = false; if (again && active) { again = false; void scan(); } }
   }
@@ -81,6 +89,17 @@ if (!(globalThis as any).__glinvisible) {
   document.fonts.addEventListener('loadingdone', schedule);
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.target !== 'content' || sender.id !== chrome.runtime.id) return;
+    if (message.action === 'scan-progress') {
+      const update = message.progress as ScanProgress;
+      if (active && running && scanInfo && scanInfo.id === message.scanId && scanInfo.epoch === epoch && update.total === scanInfo.total - scanInfo.cached) {
+        const completed = Math.min(scanInfo.total, scanInfo.cached + update.completed);
+        // Progress counts completed inference, including already cached blocks.
+        if (!progress || completed >= progress.completed) scanning(update.phase === 'loading' ? 'Loading the local model into memory...' : 'Checking visible text on your device...', {
+          phase: update.phase, completed, total: scanInfo.total,
+        });
+      }
+      respond({ ok: true }); return;
+    }
     if (message.action === 'toggle') { if (active) restore(); else start(); }
     if (message.action === 'restore') restore();
     if (message.action === 'mask-selection') {
@@ -89,6 +108,6 @@ if (!(globalThis as any).__glinvisible) {
       const range = selection.getRangeAt(0).cloneRange();
       if (!active) start(); manualRanges.push(range); selection.removeAllRanges(); schedule();
     }
-    respond({ state, detail });
+    respond({ state, detail, progress });
   });
 }

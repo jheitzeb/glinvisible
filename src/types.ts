@@ -2,6 +2,8 @@ export type Category = 'person' | 'address' | 'email' | 'phone' | 'identifier' |
 export type Span = { start: number; end: number; category: Category; score: number; source: string };
 export type Segment = { id: string; text: string };
 export type Detection = { id: string; spans: Span[] };
+export type ScanProgress = { phase: 'loading' | 'scanning'; completed: number; total: number };
+export type ProgressRoute = { tabId: number; scanId: string };
 export type ModelFile = { path: string; size: number; sha256: string };
 export type ModelSpec = {
   id: string; name: string; upstream: string; repo: string; revision: string;

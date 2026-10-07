@@ -12,7 +12,7 @@ This is an early working prototype. Functional offline checks are included. Dete
 
 Requires desktop Chrome 116 or later.
 
-**Install without building:** download [the prototype zip](https://github.com/jheitzeb/glinvisible/releases/download/v0.1.0/glinvisible-0.1.0.zip), unzip it, and load the extracted folder using Chrome's **Load unpacked** button. Continue with model setup in step 2 below.
+**Install without building:** download [the prototype zip](https://github.com/jheitzeb/glinvisible/releases/download/v0.1.1/glinvisible-0.1.1.zip), unzip it, and load the extracted folder using Chrome's **Load unpacked** button. Continue with model setup in step 2 below.
 
 To build from source, use Node.js 22 or later:
 
@@ -48,11 +48,13 @@ The model download is the only application network path. All inference code, tok
 
 The first model adapter uses a pinned Q8 export of [Fastino's GLiNER2 privacy model](https://huggingface.co/fastino/gliner2-privacy-filter-PII-multi) from [okasi's ONNX export](https://huggingface.co/okasi/gliner2-privacy-filter-pii-multi-onnx). The export has seven fixed categories: names, addresses, emails, phone numbers, identifiers, URLs, and usernames. Names, addresses, emails, phone numbers, and identifiers are enabled by default. Local patterns also cover common email/phone formats, US SSNs, and recognizable API keys. Preferences include categories, threshold, block size, avatar hiding, and literal custom terms.
 
-Text is collected from visible DOM nodes, open shadow roots, and visible form fields. Inline text across elements keeps its character offsets. Long text is processed in overlapping chunks. Detected character spans become DOM Range rectangles covered by opaque mosaic tiles. The page is covered while an initial or changed viewport is being scanned. Scroll, resize, typing, and DOM mutations trigger rescans; repeated text uses an in-memory cache. Restore removes the overlay.
+Text is collected from visible DOM nodes, open shadow roots, and visible form fields. Inline text across elements keeps its character offsets. Long text is processed in overlapping chunks. Detected character spans become DOM Range rectangles covered by opaque mosaic tiles. The page stays softly blurred while an initial or changed viewport is scanned. A spinner indicates model loading, then a progress bar counts completed text blocks, including cached results. This temporary blur preserves context and is not completed redaction. Scroll, resize, typing, and DOM mutations trigger rescans; repeated text uses an in-memory cache. Restore removes the overlay.
+
+![Blurred page with a local scan indicator and text-block progress](assets/scanning-demo.png)
 
 Embedded iframes, canvases, and videos are covered as whole regions because this version cannot read their pixels. Images and closed shadow roots are not analyzed. Mask selected text manually when needed. The model card lists English, French, Spanish, German, Italian, Portuguese, and Dutch; language quality has not been validated here.
 
-**Visual redaction is for screenshots, demos, and screen sharing.** Original text remains in the page DOM and can still be copied, inspected, saved, or read by assistive technology. This does not produce a sanitized document. Models can miss PII; review the result before sharing. Busy animated pages can keep the scan curtain up. CPU inference and the first model load can be slow, and this model requires substantial browser memory.
+**Visual redaction is for screenshots, demos, and screen sharing.** Original text remains in the page DOM and can still be copied, inspected, saved, or read by assistive technology. This does not produce a sanitized document. Models can miss PII; review the result before sharing. Busy animated pages can keep the scanning blur visible. CPU inference and the first model load can be slow, and this model requires substantial browser memory.
 
 ## Swapping models
 
