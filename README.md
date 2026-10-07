@@ -10,7 +10,11 @@ This is an early working prototype. Functional offline checks are included. Dete
 
 ## Try it
 
-Requires desktop Chrome 116 or later and Node.js 22 or later to build.
+Requires desktop Chrome 116 or later.
+
+**Install without building:** download [the prototype zip](https://github.com/jheitzeb/glinvisible/releases/download/v0.1.0/glinvisible-0.1.0.zip), unzip it, and load the extracted folder using Chrome's **Load unpacked** button. Continue with model setup in step 2 below.
+
+To build from source, use Node.js 22 or later:
 
 ```sh
 git clone https://github.com/jheitzeb/glinvisible.git
