@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "types": ["chrome", "node"], "strict": true,
+    "skipLibCheck": true, "allowImportingTsExtensions": true,
+    "resolveJsonModule": true, "noEmit": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.test.ts"]
+}

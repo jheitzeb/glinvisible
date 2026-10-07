@@ -1,0 +1,17 @@
+GLiNvisible application code: MIT, copyright 2026 Joe Heitzeberg.
+
+Model: fastino/gliner2-privacy-filter-PII-multi, Apache-2.0.
+Export: okasi/gliner2-privacy-filter-pii-multi-onnx, Apache-2.0.
+Pinned export revision: 9b451660064ee7e4e8367642633e9d390ea31465.
+Model weights and tokenizers are downloaded separately and retain their upstream licenses.
+The preprocessing schema and greedy span decoding follow the public GLiNER2
+and ONNX export tensor contracts. The synthetic fixture in test/reference is
+from that pinned export, under Apache-2.0.
+https://github.com/fastino-ai/GLiNER2
+https://huggingface.co/okasi/gliner2-privacy-filter-pii-multi-onnx
+
+Bundled production dependencies:
+- ONNX Runtime Web: MIT, Microsoft Corporation.
+- @huggingface/tokenizers: Apache-2.0, Hugging Face.
+- @noble/hashes: MIT, Paul Miller.
+Dependency license texts are included in the built extension's licenses folder.

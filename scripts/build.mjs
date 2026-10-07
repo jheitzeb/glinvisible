@@ -1,0 +1,12 @@
+import { build } from 'esbuild';
+import { cp, mkdir, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const dist = `${root}dist`;
+await rm(dist, { recursive: true, force: true });
+await mkdir(`${dist}/runtime`, { recursive: true });
+await build({ absWorkingDir: root, entryPoints: { background: 'src/background.ts', offscreen: 'src/offscreen.ts', worker: 'src/worker.ts', options: 'src/ui/options.ts', popup: 'src/ui/popup.ts' }, outdir: dist, bundle: true, format: 'esm', target: 'chrome116', sourcemap: false, minify: true });
+await build({ absWorkingDir: root, entryPoints: ['src/content.ts'], outfile: `${dist}/content.js`, bundle: true, format: 'iife', target: 'chrome116', minify: true });
+for (const file of ['manifest.json', 'options.html', 'popup.html', 'offscreen.html', 'ui.css', 'icons', 'licenses', 'NOTICE']) await cp(`${root}${file}`, `${dist}/${file}`, { recursive: true });
+for (const file of ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']) await cp(`${root}node_modules/onnxruntime-web/dist/${file}`, `${dist}/runtime/${file}`);
+console.log('Built unpacked Chrome extension in dist/ (model weights excluded).');
